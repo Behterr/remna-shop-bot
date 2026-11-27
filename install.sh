@@ -3,13 +3,11 @@ set -Eeuo pipefail
 
 # ==============================================================================
 # Интерактивный установщик remna-shop-bot для Ubuntu / Debian VPS
-# Поддержка приватного GitHub-репозитория (GITHUB_TOKEN или SSH Deploy Key)
 # ==============================================================================
 
+REPO_URL="https://github.com/Behterr/remna-shop-bot.git"
 INSTALL_DIR="${INSTALL_DIR:-/opt/remna-shop-bot}"
-REPO_OWNER_SLUG="${REPO_OWNER_SLUG:-}"
 CLI_BIN="/usr/local/bin/remnabot"
-SSH_KEY_PATH="/root/.ssh/remnabot_deploy_key"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -69,82 +67,16 @@ install_dependencies() {
 }
 
 setup_repo() {
-    local auth_mode=""
-    local github_token="${GITHUB_TOKEN:-}"
-    local repo_slug="${REPO_OWNER_SLUG}"
-
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
         log_info "Репозиторий уже существует в ${INSTALL_DIR}, обновляем..."
-        if [[ -n "${github_token}" ]]; then
-            local origin_url
-            origin_url="$(git -C "${INSTALL_DIR}" remote get-url origin)"
-            if [[ "${origin_url}" == https://github.com/* ]]; then
-                local clean_path="${origin_url#https://github.com/}"
-                git -C "${INSTALL_DIR}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${github_token}" | base64 -w0)" pull --ff-only
-            else
-                git -C "${INSTALL_DIR}" pull --ff-only
-            fi
-        elif [[ -f "${SSH_KEY_PATH}" ]]; then
-            GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-                git -C "${INSTALL_DIR}" pull --ff-only
-        else
-            git -C "${INSTALL_DIR}" pull --ff-only
-        fi
+        git -C "${INSTALL_DIR}" pull --ff-only
         log_ok "Код обновлён."
         return
     fi
 
-    if [[ -z "${repo_slug}" ]]; then
-        repo_slug="$(prompt_value "Укажите GitHub-репозиторий (формат username/remna-shop-bot)")"
-    fi
-    if [[ -z "${repo_slug}" ]]; then
-        log_err "Не указан репозиторий GitHub."
-        exit 1
-    fi
-
-    if [[ -n "${github_token}" ]]; then
-        auth_mode="token"
-    else
-        echo "Выберите способ доступа к приватному репозиторию:"
-        echo "  1) GitHub Personal Access Token (GITHUB_TOKEN)"
-        echo "  2) SSH Deploy Key"
-        local choice
-        choice="$(prompt_value "Ваш выбор" "1")"
-        if [[ "${choice}" == "2" ]]; then
-            auth_mode="ssh"
-        else
-            auth_mode="token"
-            github_token="$(prompt_value "Введите GITHUB_TOKEN (ввод скрыт): " "" "true")"
-        fi
-    fi
-
     mkdir -p "$(dirname "${INSTALL_DIR}")"
-
-    if [[ "${auth_mode}" == "ssh" ]]; then
-        mkdir -p /root/.ssh
-        chmod 700 /root/.ssh
-        if [[ ! -f "${SSH_KEY_PATH}" ]]; then
-            ssh-keygen -t ed25519 -f "${SSH_KEY_PATH}" -N "" -C "remnabot-deploy" >/dev/null
-            log_warn "Добавьте этот публичный ключ в GitHub → Settings → Deploy keys:"
-            echo ""
-            cat "${SSH_KEY_PATH}.pub"
-            echo ""
-            read -r -p "После добавления ключа нажмите Enter для продолжения..." </dev/tty
-        fi
-        GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            git clone "git@github.com:${repo_slug}.git" "${INSTALL_DIR}"
-    else
-        if [[ -z "${github_token}" ]]; then
-            log_err "GITHUB_TOKEN не может быть пустым."
-            exit 1
-        fi
-        local auth_b64
-        auth_b64="$(printf 'x-access-token:%s' "${github_token}" | base64 -w0)"
-        git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_b64}" \
-            clone "https://github.com/${repo_slug}.git" "${INSTALL_DIR}"
-        git -C "${INSTALL_DIR}" remote set-url origin "https://github.com/${repo_slug}.git"
-    fi
-
+    log_info "Клонирование ${REPO_URL} в ${INSTALL_DIR}..."
+    git clone "${REPO_URL}" "${INSTALL_DIR}"
     log_ok "Репозиторий клонирован в ${INSTALL_DIR}."
 }
 

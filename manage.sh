@@ -8,7 +8,6 @@ set -Eeuo pipefail
 SOURCE_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 PROJECT_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
 BACKUP_DIR="${PROJECT_DIR}/backups"
-SSH_KEY_PATH="/root/.ssh/remnabot_deploy_key"
 CLI_BIN="/usr/local/bin/remnabot"
 
 cd "${PROJECT_DIR}"
@@ -42,31 +41,7 @@ menu_status_and_logs() {
 
 menu_update() {
     echo "=== Обновление remna-shop-bot ==="
-    local origin_url
-    origin_url="$(git remote get-url origin 2>/dev/null || true)"
-    if [[ "${origin_url}" == git@* && -f "${SSH_KEY_PATH}" ]]; then
-        GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            git pull --ff-only
-    elif [[ -n "${GITHUB_TOKEN:-}" && "${origin_url}" == https://github.com/* ]]; then
-        local auth_b64
-        auth_b64="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
-        git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_b64}" pull --ff-only
-    else
-        if ! git pull --ff-only; then
-            read -r -s -p "Приватный репозиторий: введите GITHUB_TOKEN (или Enter для отмены): " token </dev/tty
-            echo ""
-            if [[ -n "${token}" ]]; then
-                local auth_b64
-                auth_b64="$(printf 'x-access-token:%s' "${token}" | base64 -w0)"
-                git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_b64}" pull --ff-only
-            else
-                echo "Обновление отменено."
-                pause
-                return
-            fi
-        fi
-    fi
-
+    git pull --ff-only
     chmod +x entrypoint.sh install.sh manage.sh
     docker compose up -d --build
     docker image prune -f >/dev/null 2>&1 || true
