@@ -1,0 +1,11 @@
+# Переименуйте этот файл в docker-compose.override.yml (или выберите пункт при установке),
+# чтобы подключить контейнер бота к внешней Docker-сети панели Remnawave.
+services:
+  bot:
+    networks:
+      - internal
+      - remnawave-network
+
+networks:
+  remnawave-network:
+    external: true
